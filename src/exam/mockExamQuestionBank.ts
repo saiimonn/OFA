@@ -1,5 +1,3 @@
-import pipelineResultsRaw from "../../pipeline/outputs-all/pipeline_results.json?raw";
-import questionAnswerMappingRaw from "../../pipeline/outputs-all/question_answer_mapping.json?raw";
 import {
   allTopics,
   categoryTopics,
@@ -9,26 +7,17 @@ import {
   type MockExamSettings,
 } from "./mockExamModel";
 
-type RawPipelineQuestion = {
-  pdf_name?: string;
-  page_start?: string | number;
-  question_number?: string | number;
-  question_text?: string;
-  options?: unknown;
-  region_image_path?: string | null;
-  option_image_paths?: unknown;
-  category?: string;
-  mapped_answer?: string | null;
-  subject_category?: string;
-  subject_topic?: string;
+type ParsedVaultQuestion = {
+  sourcePath: string;
+  examType: MockExamSettings["examType"];
+  examCode: string;
+  questionNumber: string;
+  questionText: string;
+  optionLines: string[];
+  correctOption: string;
+  subjectTopic: string;
+  questionImagePath: string | null;
 };
-
-type RawPipelineEntry = {
-  pdf_path?: string;
-  questions?: RawPipelineQuestion[];
-};
-
-type AnswerMapping = Record<string, Record<string, string>>;
 
 const isString = (value: unknown): value is string => typeof value === "string";
 
@@ -42,50 +31,16 @@ const normalizeLegacySymbols = (text: string): string =>
     .replace(/\uF0B4/g, "×")
     .replace(/\uF0B9/g, "≠");
 
-const safeParsePipelineResults = (): RawPipelineEntry[] => {
-  try {
-    const parsed = JSON.parse(pipelineResultsRaw) as unknown;
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed as RawPipelineEntry[];
-  } catch {
-    return [];
-  }
-};
+const stripInlineMarkdown = (text: string): string =>
+  text
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/`/g, "")
+    .replace(/\[\[(.*?)\]\]/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
 
-const safeParseAnswerMapping = (): AnswerMapping => {
-  try {
-    const parsed = JSON.parse(questionAnswerMappingRaw) as unknown;
-    if (!parsed || typeof parsed !== "object") {
-      return {};
-    }
-    return parsed as AnswerMapping;
-  } catch {
-    return {};
-  }
-};
-
-const pipelineEntries = safeParsePipelineResults();
-const answerMapping = safeParseAnswerMapping();
-
-const getFileNameFromPath = (pathValue: string | undefined): string => {
-  if (!pathValue) {
-    return "";
-  }
-
-  const parts = pathValue.split(/[/\\]/);
-  return parts[parts.length - 1] ?? "";
-};
-
-const normalizeAnswer = (value: string | null | undefined): string | null => {
-  if (!value) {
-    return null;
-  }
-
-  const matched = value.toUpperCase().match(/[A-I]/);
-  return matched ? matched[0] : null;
-};
+const normalizeSpaces = (text: string): string => text.replace(/\s+/g, " ").trim();
 
 const deriveCategoryFromTopic = (topic: string): CategoryName | "Uncategorized" => {
   const foundCategory = (Object.keys(categoryTopics) as CategoryName[]).find((categoryName) =>
@@ -95,424 +50,299 @@ const deriveCategoryFromTopic = (topic: string): CategoryName | "Uncategorized" 
   return foundCategory ?? "Uncategorized";
 };
 
-const matchesExamType = (pdfName: string, examType: MockExamSettings["examType"]): boolean => {
-  const normalized = pdfName.toLowerCase();
-
-  if (examType === "AM EXAM") {
-    return normalized.includes("_am.pdf") || normalized.includes("_a.pdf");
-  }
-
-  return normalized.includes("_pm.pdf") || normalized.includes("_b.pdf");
+const topicByTag: Record<string, string> = {
+  "number-systems": "Number Systems & Data Representation",
+  "data-encoding": "Number Systems & Data Representation",
+  sets: "Applied Mathematics",
+  math: "Applied Mathematics",
+  probability: "Applied Mathematics",
+  statistics: "Applied Mathematics",
+  algorithms: "Discrete Math & Algorithms",
+  "data-structures": "Discrete Math & Algorithms",
+  "automata-theory": "Discrete Math & Algorithms",
+  hardware: "Computer Architecture & Hardware",
+  "systems-architecture": "Computer Architecture & Hardware",
+  "digital-logic": "Digital Logic",
+  "operating-systems": "Operating Systems",
+  software: "Software Engineering & Design",
+  programming: "Software Engineering & Design",
+  "object-oriented-programming": "Software Engineering & Design",
+  "software-engineering": "Software Engineering & Design",
+  "software-testing": "Software Testing",
+  networking: "Networking",
+  cybersecurity: "Cybersecurity",
+  "web-technologies": "Emerging Technologies",
+  devops: "IT Service Management (ITSM)",
+  "service-management": "IT Service Management (ITSM)",
+  "project-management": "Project Management",
+  accounting: "Corporate Finance",
+  "business-administration": "Business Strategy",
+  "information-management": "System Strategy",
 };
 
-const extractOptionsFromLines = (optionLines: string[]): { key: string; text: string }[] => {
-  const normalizedText = optionLines.join(" ").replace(/\s+/g, " ").trim();
-  const optionRegex = /([A-I])[.)]\s*([\s\S]*?)(?=(?:\s+[A-I][.)]\s)|$)/g;
+const genericTags = new Set(["math", "software", "programming", "business-administration"]);
 
-  const regexMatches = [...normalizedText.matchAll(optionRegex)].map((match) => ({
-    key: match[1]?.toUpperCase() ?? "",
-    text: (match[2] ?? "").trim(),
-  }));
+const inferTopicFromText = (text: string): string => {
+  const normalized = text.toLowerCase();
 
-  const fallbackMatches = optionLines.map((line, index) => {
-    const cleaned = line.trim();
-    const prefixedMatch = cleaned.match(/^([A-I])[.)]\s*(.*)$/i);
+  const rules: Array<[RegExp, string]> = [
+    [/\b(hex|binary|octal|number base|floating point|twos complement)\b/i, "Number Systems & Data Representation"],
+    [/\b(probability|set|matrix|permutation|combination|statistics|expected value)\b/i, "Applied Mathematics"],
+    [/\b(algorithm|graph theory|sorting|search|automata|state transition)\b/i, "Discrete Math & Algorithms"],
+    [/\b(cpu|cache|memory|instruction|register|bus|clock)\b/i, "Computer Architecture & Hardware"],
+    [/\b(process|thread|paging|virtual memory|scheduler|deadlock|semaphore)\b/i, "Operating Systems"],
+    [/\b(boolean|karnaugh|truth table|logic circuit|flip-flop)\b/i, "Digital Logic"],
+    [/\b(render|pixel|vector|raster|3d|graphics)\b/i, "Computer Graphics"],
+    [/\b(sql|database|normalization|relation|index|transaction)\b/i, "Databases"],
+    [/\b(tcp|ip|subnet|router|switch|dns|http|network)\b/i, "Networking"],
+    [/\b(crypt|cipher|security|xss|csrf|malware|firewall|auth)\b/i, "Cybersecurity"],
+    [/\b(test case|white-box|black-box|integration test|unit test)\b/i, "Software Testing"],
+    [/\b(uml|class diagram|design pattern|refactor|object-oriented|programming)\b/i, "Software Engineering & Design"],
+    [/\b(cloud|iot|ai|machine learning|blockchain|emerging)\b/i, "Emerging Technologies"],
+    [/\b(project|wbs|gantt|critical path|pmbok|scope)\b/i, "Project Management"],
+    [/\b(incident|sla|service desk|change management|itil)\b/i, "IT Service Management (ITSM)"],
+    [/\b(audit|governance|compliance|control objective)\b/i, "System Auditing"],
+    [/\b(quality|iso 9001|defect|qa|qc)\b/i, "Quality Management"],
+    [/\b(npv|irr|roi|cash flow|balance sheet|accounting|finance)\b/i, "Corporate Finance"],
+    [/\b(strategy|marketing|business model|competitive|enterprise)\b/i, "Business Strategy"],
+    [/\b(information system strategy|systemization|roadmap|portfolio)\b/i, "System Strategy"],
+    [/\b(copyright|patent|license|trademark|intellectual property|law)\b/i, "Law & Intellectual Property"],
+    [/\b(digital transformation|dx|platform economy|digital trend)\b/i, "Digital Trends"],
+  ];
 
-    if (prefixedMatch) {
-      return {
-        key: prefixedMatch[1].toUpperCase(),
-        text: (prefixedMatch[2] ?? "").trim(),
-      };
-    }
+  const matched = rules.find(([pattern]) => pattern.test(normalized));
+  return matched?.[1] ?? "Software Engineering & Design";
+};
 
-    return {
-      key: String.fromCharCode(65 + index),
-      text: cleaned,
-    };
-  });
+const extractTagsFromCategoryLine = (rawMarkdown: string): string[] => {
+  const categoryLine = rawMarkdown.match(/^Category:\s*(.+)$/im)?.[1] ?? "";
+  const tags = [...categoryLine.matchAll(/#([a-z0-9-]+)/gi)].map((match) => match[1].toLowerCase());
+  return tags;
+};
 
-  const source = regexMatches.length >= 2 ? regexMatches : fallbackMatches;
-  const seen = new Set<string>();
+const mapTagsToTopic = (tags: string[], fallbackText: string): string => {
+  const mappedTopics = tags
+    .map((tag) => ({ tag, topic: topicByTag[tag] }))
+    .filter((entry): entry is { tag: string; topic: string } => isString(entry.topic));
 
-  return source.filter((option) => {
-    if (!option.key || !option.text || seen.has(option.key)) {
-      return false;
-    }
+  const specific = mappedTopics.find((entry) => !genericTags.has(entry.tag));
+  if (specific) {
+    return specific.topic;
+  }
 
-    seen.add(option.key);
-    return true;
-  });
+  if (mappedTopics.length > 0) {
+    return mappedTopics[0].topic;
+  }
+
+  return inferTopicFromText(fallbackText);
+};
+
+const parseCorrectOption = (rawAnswerLine: string): string | null => {
+  const cleaned = stripInlineMarkdown(rawAnswerLine);
+  if (!cleaned) {
+    return null;
+  }
+
+  if (/[A-Za-z]\s*[,/]/.test(cleaned)) {
+    return null;
+  }
+
+  const direct = cleaned.match(/^\(?([A-Da-d])\)?[.)]?\s*/);
+  if (direct) {
+    return direct[1].toUpperCase();
+  }
+
+  if (/^[A-Da-d]$/.test(cleaned)) {
+    return cleaned.toUpperCase();
+  }
+
+  return null;
+};
+
+const toQuestionImagePath = (sourcePath: string, imageFileName: string): string => {
+  const normalizedFileName = imageFileName.trim().replace(/\\/g, "/");
+  const sourceDir = sourcePath.split("/").slice(0, -1).join("/");
+  const candidate = `${sourceDir}/${normalizedFileName}`;
+
+  // The app currently resolves relative media from project root at runtime.
+  return candidate.replace(/^\.\//, "");
 };
 
 const parseOptionPrefix = (line: string): { key: string; text: string } | null => {
-  const prefixedMatch = line.trim().match(/^([A-I])[.)]\s*(.*)$/i);
-  if (!prefixedMatch) {
+  const stripped = stripInlineMarkdown(line);
+  const match = stripped.match(/^([A-Da-d])[.)]\s*(.+)$/);
+  if (!match) {
     return null;
   }
 
   return {
-    key: prefixedMatch[1].toUpperCase(),
-    text: (prefixedMatch[2] ?? "").trim(),
+    key: match[1].toUpperCase(),
+    text: normalizeSpaces(match[2]),
   };
 };
 
-const normalizeQuestionStemAndOptions = (
-  questionText: string,
-  optionLines: string[],
-): { normalizedQuestionText: string; normalizedOptionLines: string[] } => {
-  if (optionLines.length === 0) {
-    return {
-      normalizedQuestionText: questionText,
-      normalizedOptionLines: optionLines,
-    };
+const extractOptionsFromLines = (optionLines: string[]): { key: string; text: string }[] => {
+  const byKey = new Map<string, string>();
+
+  optionLines.forEach((line) => {
+    const parsed = parseOptionPrefix(line);
+    if (!parsed) {
+      return;
+    }
+
+    byKey.set(parsed.key, parsed.text);
+  });
+
+  return ["A", "B", "C", "D"]
+    .filter((key) => byKey.has(key))
+    .map((key) => ({
+      key,
+      text: byKey.get(key) ?? "",
+    }));
+};
+
+const parseMarkdownQuestion = (sourcePath: string, rawMarkdown: string): ParsedVaultQuestion | null => {
+  const normalizedPath = sourcePath.replace(/\\/g, "/");
+  const fileName = normalizedPath.split("/").pop() ?? "";
+  const fileStem = fileName.replace(/\.md$/i, "");
+
+  const lines = rawMarkdown.split(/\r?\n/);
+  const headingIndex = lines.findIndex((line) => /^#\s+/.test(line.trim()));
+  if (headingIndex < 0) {
+    return null;
   }
 
-  const canonicalOptionKeys = new Set(["A", "B", "C", "D"]);
-  const parsedLines = optionLines.map((line) => ({ line, parsed: parseOptionPrefix(line) }));
+  const headingLine = lines[headingIndex].trim();
+  const headingId = headingLine.match(/^#\s+([A-Za-z0-9._-]+)/)?.[1] ?? fileStem;
 
-  const keyCounts = new Map<string, number>();
-  parsedLines.forEach(({ parsed }) => {
-    if (!parsed) {
+  const delimiterIndex = lines.findIndex((line, index) => index > headingIndex && /^\?\s*$/.test(line.trim()));
+  if (delimiterIndex < 0) {
+    return null;
+  }
+
+  const answerLine = lines.slice(delimiterIndex + 1).find((line) => line.trim().length > 0) ?? "";
+  const correctOption = parseCorrectOption(answerLine);
+  if (!correctOption) {
+    return null;
+  }
+
+  const bodyLines = lines.slice(headingIndex + 1, delimiterIndex);
+  const questionParts: string[] = [];
+  const optionLines: string[] = [];
+  let firstImagePath: string | null = null;
+  let currentOptionIndex = -1;
+
+  bodyLines.forEach((rawLine) => {
+    const line = rawLine.trim();
+    if (!line) {
       return;
     }
 
-    keyCounts.set(parsed.key, (keyCounts.get(parsed.key) ?? 0) + 1);
+    const imageMatch = line.match(/^!\[\[([^\]]+)\]\]$/);
+    if (imageMatch) {
+      if (!firstImagePath) {
+        firstImagePath = toQuestionImagePath(normalizedPath, imageMatch[1]);
+      }
+      return;
+    }
+
+    const option = parseOptionPrefix(line);
+    if (option) {
+      optionLines.push(`${option.key}. ${option.text}`);
+      currentOptionIndex = optionLines.length - 1;
+      return;
+    }
+
+    if (currentOptionIndex >= 0) {
+      const continuedText = normalizeSpaces(stripInlineMarkdown(line));
+      if (continuedText) {
+        optionLines[currentOptionIndex] = `${optionLines[currentOptionIndex]} ${continuedText}`.trim();
+      }
+      return;
+    }
+
+    const cleanedQuestionLine = normalizeSpaces(stripInlineMarkdown(line));
+    if (cleanedQuestionLine) {
+      questionParts.push(cleanedQuestionLine);
+    }
   });
 
-  const firstCanonicalAIndex = parsedLines.findIndex(({ parsed }) => parsed?.key === "A");
-  const questionAdditions: string[] = [];
-  const normalizedOptionLines: string[] = [];
+  const questionText = normalizeLegacySymbols(questionParts.join(" "));
+  if (!questionText || optionLines.length < 2) {
+    return null;
+  }
 
-  parsedLines.forEach(({ line, parsed }, lineIndex) => {
-    if (!parsed) {
-      normalizedOptionLines.push(line);
-      return;
-    }
+  const categoryTags = extractTagsFromCategoryLine(rawMarkdown);
+  const subjectTopic = mapTagsToTopic(categoryTags, questionText);
 
-    const keyCount = keyCounts.get(parsed.key) ?? 0;
-    const isBeforeFirstCanonicalA = firstCanonicalAIndex !== -1 && lineIndex < firstCanonicalAIndex;
-    const isOutsideCanonicalOptions = !canonicalOptionKeys.has(parsed.key);
-    const looksLikeNarrative =
-      parsed.text.length >= 80 ||
-      /\?|\b(what|which|when|where|how|percentage|probability)\b/i.test(parsed.text);
+  const examMarker = `${normalizedPath} ${headingId}`.toLowerCase();
+  const examType: MockExamSettings["examType"] =
+    /(^|[\\/])pm([\\/]|$)|_pm_|fe-b/.test(examMarker) ? "PM EXAM" : "AM EXAM";
 
-    const shouldPromoteToQuestionStem =
-      looksLikeNarrative && (keyCount > 1 || isOutsideCanonicalOptions || isBeforeFirstCanonicalA);
-
-    if (shouldPromoteToQuestionStem) {
-      questionAdditions.push(parsed.text);
-      return;
-    }
-
-    normalizedOptionLines.push(line);
-  });
-
-  const normalizedQuestionText = [questionText, ...questionAdditions].join(" ").replace(/\s+/g, " ").trim();
+  const split = headingId.match(/^(.*?)[_-](\d+(?:\.\d+)?)$/);
+  const examCode = split?.[1] ?? fileStem;
+  const questionNumber = split?.[2] ?? headingId;
 
   return {
-    normalizedQuestionText,
-    normalizedOptionLines,
+    sourcePath: normalizedPath,
+    examType,
+    examCode,
+    questionNumber,
+    questionText,
+    optionLines,
+    correctOption,
+    subjectTopic,
+    questionImagePath: firstImagePath,
   };
 };
 
-const parseOptionImagePathMap = (rawOptionImagePaths: unknown): Map<string, string> => {
-  const imagePathMap = new Map<string, string>();
+const vaultMarkdownModules = import.meta.glob("../../philnits-vault/**/*.md", {
+  eager: true,
+  query: "?raw",
+  import: "default",
+}) as Record<string, string>;
 
-  if (!rawOptionImagePaths || typeof rawOptionImagePaths !== "object") {
-    return imagePathMap;
-  }
-
-  for (const [rawKey, rawValue] of Object.entries(rawOptionImagePaths as Record<string, unknown>)) {
-    if (!isString(rawValue)) {
-      continue;
-    }
-
-    const normalizedKey = rawKey.toUpperCase().match(/[A-I]/)?.[0];
-    const normalizedPath = rawValue.trim().replace(/\\/g, "/");
-
-    if (!normalizedKey || !normalizedPath) {
-      continue;
-    }
-
-    imagePathMap.set(normalizedKey, normalizedPath);
-  }
-
-  return imagePathMap;
-};
-
-const normalizeImagePath = (rawPath: unknown): string | null => {
-  if (!isString(rawPath)) {
-    return null;
-  }
-
-  const normalized = rawPath.trim().replace(/\\/g, "/");
-  return normalized || null;
-};
-
-const extractNumericSegment = (value: string | number | undefined): string | null => {
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  const matched = String(value).match(/\d+/);
-  return matched ? matched[0] : null;
-};
-
-const buildQuestionRegionFallbackPath = (
-  pdfName: string,
-  questionNumber: string,
-  pageStart: string | number | undefined,
-): string | null => {
-  const baseName = pdfName.replace(/\.pdf$/i, "");
-  const questionNumberDigits = extractNumericSegment(questionNumber);
-  const pageDigits = extractNumericSegment(pageStart);
-
-  if (!baseName || !questionNumberDigits || !pageDigits) {
-    return null;
-  }
-
-  return `images/${baseName}/question_regions/${baseName}_q${questionNumberDigits.padStart(3, "0")}_p${pageDigits.padStart(3, "0")}.png`;
-};
-
-const buildOptionRegionFallbackPath = (
-  pdfName: string,
-  questionNumber: string,
-  pageStart: string | number | undefined,
-  optionKey: string,
-): string | null => {
-  const baseName = pdfName.replace(/\.pdf$/i, "");
-  const questionNumberDigits = extractNumericSegment(questionNumber);
-  const pageDigits = extractNumericSegment(pageStart);
-  const normalizedOptionKey = optionKey.toUpperCase().match(/[A-I]/)?.[0];
-
-  if (!baseName || !questionNumberDigits || !pageDigits || !normalizedOptionKey) {
-    return null;
-  }
-
-  return `images/${baseName}/option_regions/${baseName}_q${questionNumberDigits.padStart(3, "0")}_p${pageDigits.padStart(3, "0")}_opt_${normalizedOptionKey}.png`;
-};
-
-const extractTableText = (
-  questionText: string,
-  optionLines: string[],
-  categoryValue: string | undefined,
-): string | null => {
-  const isTableQuestion = categoryValue?.toLowerCase() === "table" || /\btable\b/i.test(questionText);
-  if (!isTableQuestion) {
-    return null;
-  }
-
-  const supplementalOptionLines = optionLines
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .filter((line) => !/^[A-D][.)]\s+/i.test(line))
-    .map((line) => line.replace(/^[A-I][.)]\s*/i, "").trim());
-
-  let tableSegment = [questionText, ...supplementalOptionLines].join(" ").replace(/\s+/g, " ").trim();
-  if (!tableSegment) {
-    return null;
-  }
-
-  const focusedMarkers = [
-    /Type of coin\s+Number of coins[\s\S]*$/i,
-    /Item\s+Volume\s+Price[\s\S]*$/i,
-    /CPU\s+Table[\s\S]*$/i,
-    /Process\s+Length of execution time\s+Time of arrival[\s\S]*$/i,
-    /Product_code\s+Product_name\s+Unit_price[\s\S]*$/i,
-    /Employee_ID\s+Project_ID[\s\S]*$/i,
-  ];
-
-  for (const marker of focusedMarkers) {
-    const markerMatch = tableSegment.match(marker);
-    if (markerMatch) {
-      tableSegment = markerMatch[0];
-      break;
-    }
-  }
-
-  tableSegment = tableSegment
-    .replace(/\s+[-–]\s*\d+\s*[-–]\s*$/g, "")
-    .replace(/\b([A-Z])\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/g, "\n$1 $2 $3")
-    .replace(/\b(\d+(?:-cent|-dollar))\s+(-?\d+(?:\.\d+)?)/gi, "\n$1 $2")
-    .replace(
-      /\b(Cache memory|Main memory|Type of coin|Number of coins|Product_code|Product_name|Unit_price|Employee_ID|Project_ID|Process|Length of execution time|Time of arrival)\b/g,
-      "\n$1",
-    )
-    .replace(/\n{2,}/g, "\n")
-    .trim();
-
-  const lineCount = tableSegment.split("\n").map((line) => line.trim()).filter(Boolean).length;
-  return lineCount >= 2 ? tableSegment : null;
-};
-
-const trimVisualQuestionStem = (questionText: string): string => {
-  const lines = questionText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (lines.length <= 1) {
-    return questionText.trim();
-  }
-
-  const visualMarkerRegex = /^(Table|Figure|Legend|Constraint:?|Account|Transfer|Transaction|Type of coin|Product|Employee|JobID|SQL|The Internet|DMZ|LAN)\b/i;
-  const repeatedTokenRegex = /\b([A-Za-z]{3,})\1\b/;
-
-  const cutoffIndex = lines.findIndex(
-    (line, index) =>
-      index > 0 &&
-      (visualMarkerRegex.test(line) || repeatedTokenRegex.test(line) || /^\d{3,}(\s+\d{2,})+/.test(line)),
-  );
-
-  if (cutoffIndex === -1) {
-    return questionText.trim();
-  }
-
-  const trimmed = lines.slice(0, cutoffIndex).join(" ").trim();
-  return trimmed.length >= 40 ? trimmed : questionText.trim();
-};
+const parsedVaultQuestions: ParsedVaultQuestion[] = Object.entries(vaultMarkdownModules)
+  .map(([sourcePath, rawMarkdown]) => parseMarkdownQuestion(sourcePath, rawMarkdown))
+  .filter((entry): entry is ParsedVaultQuestion => Boolean(entry));
 
 const buildQuestionPool = (settings: MockExamSettings): MockExamQuestion[] => {
   const selectedTopics = new Set(settings.selectedTopics);
-  const questionPool: MockExamQuestion[] = [];
 
-  pipelineEntries.forEach((entry, entryIndex) => {
-    const fallbackPdfName = getFileNameFromPath(entry.pdf_path);
-    const questions = Array.isArray(entry.questions) ? entry.questions : [];
-
-    questions.forEach((question, questionIndex) => {
-      const pdfName = isString(question.pdf_name) ? question.pdf_name : fallbackPdfName;
-      if (!pdfName || !matchesExamType(pdfName, settings.examType)) {
-        return;
+  return parsedVaultQuestions
+    .filter((question) => question.examType === settings.examType)
+    .filter((question) => selectedTopics.has(question.subjectTopic))
+    .map<MockExamQuestion | null>((question, index) => {
+      const options = extractOptionsFromLines(question.optionLines);
+      if (options.length !== 4) {
+        return null;
       }
 
-      const questionNumber = String(question.question_number ?? "").trim();
-      if (!questionNumber) {
-        return;
+      if (!["A", "B", "C", "D"].includes(question.correctOption)) {
+        return null;
       }
 
-      const subjectTopic = isString(question.subject_topic) ? question.subject_topic.trim() : "";
-      if (!subjectTopic || !selectedTopics.has(subjectTopic)) {
-        return;
-      }
+      const subjectCategory = deriveCategoryFromTopic(question.subjectTopic);
+      const tableText = /\btable\b/i.test(question.questionText) ? question.questionText : null;
 
-      const questionText = isString(question.question_text) ? question.question_text.trim() : "";
-      if (!questionText) {
-        return;
-      }
-
-      const normalizedSourceQuestionText = normalizeLegacySymbols(questionText);
-
-      const optionLines = Array.isArray(question.options)
-        ? question.options
-            .filter(isString)
-            .map((option) => normalizeLegacySymbols(option.trim()))
-            .filter(Boolean)
-        : [];
-
-      const { normalizedQuestionText, normalizedOptionLines } = normalizeQuestionStemAndOptions(
-        normalizedSourceQuestionText,
-        optionLines,
-      );
-
-      if (!normalizedQuestionText) {
-        return;
-      }
-
-      if (normalizedOptionLines.length === 0) {
-        return;
-      }
-
-      const options = extractOptionsFromLines(normalizedOptionLines);
-      if (options.length < 2) {
-        return;
-      }
-
-      const shouldUseVisualFallback =
-        question.category?.toLowerCase() === "table" || /\b(figure|diagram|uml)\b/i.test(normalizedQuestionText);
-
-      const optionImagePathMap = parseOptionImagePathMap(question.option_image_paths);
-
-      if (shouldUseVisualFallback && optionImagePathMap.size === 0) {
-        ["A", "B", "C", "D"].forEach((optionKey) => {
-          const fallbackOptionImagePath = buildOptionRegionFallbackPath(pdfName, questionNumber, question.page_start, optionKey);
-          if (fallbackOptionImagePath) {
-            optionImagePathMap.set(optionKey, fallbackOptionImagePath);
-          }
-        });
-      }
-
-      const mergedOptionMap = new Map<string, { key: string; text: string; imagePath: string | null }>();
-
-      options.forEach((option) => {
-        mergedOptionMap.set(option.key, {
+      return {
+        id: `${question.examCode}::${question.questionNumber}::${index}`,
+        pdfName: `${question.examCode}.md`,
+        questionNumber: question.questionNumber,
+        questionText: question.questionText,
+        tableText,
+        questionImagePath: question.questionImagePath,
+        options: options.map((option) => ({
           key: option.key,
           text: option.text,
-          imagePath: optionImagePathMap.get(option.key) ?? null,
-        });
-      });
-
-      optionImagePathMap.forEach((imagePath, key) => {
-        if (mergedOptionMap.has(key)) {
-          return;
-        }
-
-        mergedOptionMap.set(key, {
-          key,
-          text: "",
-          imagePath,
-        });
-      });
-
-      const canonicalOptionKeys = ["A", "B", "C", "D"];
-      const canonicalOptions = canonicalOptionKeys
-        .map((key) => mergedOptionMap.get(key))
-        .filter((option): option is { key: string; text: string; imagePath: string | null } =>
-          Boolean(option && (option.text || option.imagePath)),
-        );
-
-      if (canonicalOptions.length !== 4) {
-        return;
-      }
-
-      const mappedFromQuestion = normalizeAnswer(question.mapped_answer ?? null);
-      const mappedFromLookup = normalizeAnswer(answerMapping[pdfName]?.[questionNumber]);
-      const correctOption = mappedFromQuestion ?? mappedFromLookup;
-
-      if (!correctOption || !canonicalOptionKeys.includes(correctOption)) {
-        return;
-      }
-
-      const category = isString(question.subject_category)
-        ? question.subject_category
-        : deriveCategoryFromTopic(subjectTopic);
-      const tableText = extractTableText(normalizedQuestionText, normalizedOptionLines, question.category);
-      const displayQuestionText = shouldUseVisualFallback
-        ? trimVisualQuestionStem(normalizedQuestionText)
-        : normalizedQuestionText;
-
-      const questionImagePath =
-        normalizeImagePath(question.region_image_path) ??
-        (shouldUseVisualFallback
-          ? buildQuestionRegionFallbackPath(pdfName, questionNumber, question.page_start)
-          : null);
-
-      questionPool.push({
-        id: `${pdfName}::${questionNumber}::${entryIndex}-${questionIndex}`,
-        pdfName,
-        questionNumber,
-        questionText: displayQuestionText,
-        tableText,
-        questionImagePath,
-        options: canonicalOptions,
-        correctOption,
-        subjectCategory: category,
-        subjectTopic,
-      });
-    });
-  });
-
-  return questionPool;
+          imagePath: null as string | null,
+        })),
+        correctOption: question.correctOption,
+        subjectCategory,
+        subjectTopic: question.subjectTopic,
+      } satisfies MockExamQuestion;
+    })
+    .filter((question): question is MockExamQuestion => question !== null);
 };
 
 const shuffleQuestions = <T>(items: T[]): T[] => {
