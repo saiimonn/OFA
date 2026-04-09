@@ -1,9 +1,11 @@
+import Logo from '../assets/picker.svg'
+
 export default function NavBar(){
     return (
         <>
         <div className="hidden md:flex w-[95vw] h-auto items-center border-b-1 border-black px-3 py-4 justify-between">
-                <a href="/" className="m-0 text-2xl font-bold text-black duration-300 transition-all hover:scale-110">
-                    NitPicker
+                <a href="/" className="m-0 text-2xl font-bold text-black duration-300 transition-all hover:scale-110 flex items-center">
+                    <img src={Logo} alt="NitPicker logo" className='h-12 w-auto' />   NitPicker
                 </a>
 
                 <div className="flex gap-10">

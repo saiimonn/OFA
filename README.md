@@ -1,73 +1,83 @@
-# React + TypeScript + Vite
+# NitPick
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+NitPick is a React + TypeScript web app for FE exam preparation.
 
-Currently, two official plugins are available:
+It includes:
+- Mock exam generation from the question vault
+- Configurable exam setup (timed/untimed, question count, topic filters)
+- Instant answer reveal mode with explanation support
+- Results analytics (score, percentage, pass/fail, category breakdown, wrong-question review)
+- Previous exams browser grouped by year, with dropdown question review
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Data Source
 
-## React Compiler
+Questions are loaded from markdown files under philnits-vault. The app parses each markdown file and extracts:
+- Question text
+- Choices (A-D)
+- Correct answer
+- Explanation text
+- Inferred category/topic
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Markdown and math in explanations are rendered in HTML using:
+- react-markdown
+- remark-gfm
+- remark-math
+- rehype-katex
+- katex
 
-## Expanding the ESLint configuration
+## Main Routes
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- / : Home page
+- /notes : Notes page
+- /mockexamprep : Mock exam setup
+- /mockexam : Exam-taking page
+- /mockexamresults : Results page
+- /previousexams : Previous exam explorer
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Tech Stack
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- React 19
+- TypeScript
+- Vite
+- Tailwind CSS
+- Phosphor Icons
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Getting Started
+
+1. Install dependencies
+
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+2. Run development server
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev
 ```
+
+3. Build for production
+
+```bash
+npm run build
+```
+
+4. Preview production build
+
+```bash
+npm run preview
+```
+
+## Project Structure
+
+- src/pages : App pages
+- src/components : Shared UI components
+- src/exam : Exam models and question-bank logic
+- src/assets : App assets used in components
+- public : Static files served directly (including favicon)
+- philnits-vault : Markdown question source files
+
+## Favicon Note
+
+The app favicon is served from public/picker.svg and linked from index.html.
+If your browser still shows the old icon, do a hard refresh.
