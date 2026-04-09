@@ -214,71 +214,10 @@ export default function NotesPage() {
         <div className="min-h-screen flex w-full flex-col items-center bg-white gap-5 select-none font-sans">
             <NavBar />
 
-            {/* TITLE AND CATEGORY CHANGE */}
-            <div className="w-full min-h-[20vh] px-10 flex items-center justify-between border-b border-gray-100 pb-5">
-                <h1 className="text-8xl text-black font-bold tracking-tighter opacity-80 transition-all duration-300 hover:opacity-100">
-                    TECHNOLOGY
+            <div className="h-[90vh] w-full flex items-center justify-center ">
+                <h1 className="text-9xl">
+                    COMING SOON :)
                 </h1>
-
-                <div className="flex gap-10">
-                    <CategorySwitch label="MANAGEMENT" prompt="SWITCH TO MANAGEMENT?" />
-                    <CategorySwitch label="STRATEGY" prompt="SWITCH TO STRATEGY?" />
-                </div>
-            </div>
-
-            {/* TOPIC NAVIGATION (TABLE OF CONTENTS) */}
-            <div className="w-full px-10 sticky top-0 bg-white/90 backdrop-blur-sm z-20 py-4 border-b border-gray-200 shadow-sm">
-                <div
-                    ref={topicsScrollRef}
-                    className="mx-12 flex items-center gap-4 text-sm font-medium text-gray-500 tracking-widest overflow-x-auto pb-2"
-                >
-                    <span className="text-black pr-4 border-r border-gray-300 ">JUMP TO:</span>
-                    {notesData.map((note) => (
-                        <a 
-                            key={note.id} 
-                            href={`#${note.id}`} 
-                            className="whitespace-nowrap hover:text-black transition-colors duration-200 uppercase"
-                        >
-                            {note.title}
-                        </a>
-                    ))}
-                </div>
-
-                <button
-                    type="button"
-                    onClick={scrollTopicsLeft}
-                    aria-label="Scroll topics left"
-                    className="absolute left-10 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-black transition-colors hover:bg-black hover:text-white"
-                >
-                    <CaretLeft size={16} weight="bold" />
-                </button>
-
-                <button
-                    type="button"
-                    onClick={scrollTopicsRight}
-                    aria-label="Scroll topics right"
-                    className="absolute right-10 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-black transition-colors hover:bg-black hover:text-white"
-                >
-                    <CaretRight size={16} weight="bold" />
-                </button>
-            </div>
-
-            {/* NOTES CONTENT AREA */}
-            <div className="flex w-[95vw] justify-between ">
-                <div className="w-full max-w-5xl px-10 py-12 flex flex-col gap-24">
-                    {notesData.map((note) => (
-                        <section key={note.id} id={note.id} className="scroll-mt-32">
-                            <h2 className="text-4xl font-bold text-black mb-8 pb-4 border-b-2 border-black inline-block">
-                                {note.title}
-                            </h2>
-                            {note.content}
-                        </section>
-                    ))}
-                </div>
-
-                <div className="">
-                    <h1>ADD SOMETHING HERE</h1>
-                </div>
             </div>
             
             {/* FOOTER PADDING */}
@@ -318,3 +257,71 @@ function CategorySwitch({ label, prompt }: CategorySwitchProps) {
         </button>
     );
 }
+
+
+            // {/* TITLE AND CATEGORY CHANGE */}
+            // <div className="w-full min-h-[20vh] px-10 flex items-center justify-between border-b border-gray-100 pb-5">
+            //     <h1 className="text-8xl text-black font-bold tracking-tighter opacity-80 transition-all duration-300 hover:opacity-100">
+            //         TECHNOLOGY
+            //     </h1>
+
+            //     <div className="flex gap-10">
+            //         <CategorySwitch label="MANAGEMENT" prompt="SWITCH TO MANAGEMENT?" />
+            //         <CategorySwitch label="STRATEGY" prompt="SWITCH TO STRATEGY?" />
+            //     </div>
+            // </div>
+
+            // {/* TOPIC NAVIGATION (TABLE OF CONTENTS) */}
+            // <div className="w-full px-10 sticky top-0 bg-white/90 backdrop-blur-sm z-20 py-4 border-b border-gray-200 shadow-sm">
+            //     <div
+            //         ref={topicsScrollRef}
+            //         className="mx-12 flex items-center gap-4 text-sm font-medium text-gray-500 tracking-widest overflow-x-auto pb-2"
+            //     >
+            //         <span className="text-black pr-4 border-r border-gray-300 ">JUMP TO:</span>
+            //         {notesData.map((note) => (
+            //             <a 
+            //                 key={note.id} 
+            //                 href={`#${note.id}`} 
+            //                 className="whitespace-nowrap hover:text-black transition-colors duration-200 uppercase"
+            //             >
+            //                 {note.title}
+            //             </a>
+            //         ))}
+            //     </div>
+
+            //     <button
+            //         type="button"
+            //         onClick={scrollTopicsLeft}
+            //         aria-label="Scroll topics left"
+            //         className="absolute left-10 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-black transition-colors hover:bg-black hover:text-white"
+            //     >
+            //         <CaretLeft size={16} weight="bold" />
+            //     </button>
+
+            //     <button
+            //         type="button"
+            //         onClick={scrollTopicsRight}
+            //         aria-label="Scroll topics right"
+            //         className="absolute right-10 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full border border-gray-300 bg-white text-black transition-colors hover:bg-black hover:text-white"
+            //     >
+            //         <CaretRight size={16} weight="bold" />
+            //     </button>
+            // </div>
+
+            // {/* NOTES CONTENT AREA */}
+            // <div className="flex w-[95vw] justify-between ">
+            //     <div className="w-full max-w-5xl px-10 py-12 flex flex-col gap-24">
+            //         {notesData.map((note) => (
+            //             <section key={note.id} id={note.id} className="scroll-mt-32">
+            //                 <h2 className="text-4xl font-bold text-black mb-8 pb-4 border-b-2 border-black inline-block">
+            //                     {note.title}
+            //                 </h2>
+            //                 {note.content}
+            //             </section>
+            //         ))}
+            //     </div>
+
+            //     <div className="">
+            //         <h1>ADD SOMETHING HERE</h1>
+            //     </div>
+            // </div>

@@ -77,7 +77,7 @@ export default function HomePage(){
                     <IconWithDesc
                         content="PREVIOUS EXAM"
                         Icon={NoteIcon}
-                        onClick={() => openGoogleSearch('PHILNITS previous exam')}
+                        onClick={() => navigate('/previousexams')}
                     ></IconWithDesc>
 
                 </div>

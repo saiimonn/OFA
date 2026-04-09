@@ -16,7 +16,7 @@ export default function NavBar(){
                     </div>
                     <div className="px-2 py-1 group hover:bg-black transition-all duration-300">
 
-                    <a href="" className="text-sm font-bold group-hover:text-white transition-all duration-300">PREVIOUS EXAMS</a>
+                    <a href="/previousexams" className="text-sm font-bold group-hover:text-white transition-all duration-300">PREVIOUS EXAMS</a>
                     </div>
                 </div>
 
