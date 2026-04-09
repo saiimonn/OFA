@@ -1,51 +1,58 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import NavBar from "../components/navbar";
 import Footer from "../components/footer";
-
-const categoryTopics = {
-  Technology: [
-    "Number Systems & Data Representation",
-    "Applied Mathematics",
-    "Discrete Math & Algorithms",
-    "Computer Architecture & Hardware",
-    "Operating Systems",
-    "Digital Logic",
-    "Computer Graphics",
-    "Databases",
-    "Networking",
-    "Cybersecurity",
-    "Software Engineering & Design",
-    "Software Testing",
-    "Emerging Technologies",
-  ],
-  Management: [
-    "Project Management",
-    "IT Service Management (ITSM)",
-    "System Auditing",
-    "Quality Management",
-    "Corporate Finance",
-  ],
-  Strategy: [
-    "Business Strategy",
-    "System Strategy",
-    "IT Governance & Compliance",
-    "Law & Intellectual Property",
-    "Digital Trends",
-  ],
-} as const;
-
-const allTopics = Object.values(categoryTopics).flat();
-type CategoryName = keyof typeof categoryTopics;
+import {
+  allTopics,
+  categoryTopics,
+  clearMockExamResult,
+  saveMockExamSession,
+  type CategoryName,
+  type MockExamSettings,
+} from "../exam/mockExamModel";
+import { buildMockExamSession } from "../exam/mockExamQuestionBank";
 
 // This is a temporary page to show the exam maker page
 export default function MockExamPrepPage() {
+  const navigate = useNavigate();
   const [examType, setExamType] = useState<"AM EXAM" | "PM EXAM">("AM EXAM");
   const [isTimed, setIsTimed] = useState(true);
   const [durationMinutes, setDurationMinutes] = useState(90);
   const [questionCount, setQuestionCount] = useState(80);
   const [instantAnswers, setInstantAnswers] = useState(false);
   const [selectedTopics, setSelectedTopics] = useState<string[]>(allTopics);
+  const [startError, setStartError] = useState<string | null>(null);
   const formControlClassName = "h-6 w-6 md:h-4 md:w-4 accent-black shrink-0 cursor-pointer";
+
+  const handleStartExam = () => {
+    const examSettings: MockExamSettings = {
+      examType,
+      isTimed,
+      durationMinutes,
+      questionCount,
+      instantAnswers,
+      selectedTopics,
+    };
+
+    const session = buildMockExamSession(examSettings);
+
+    if (session.questions.length === 0) {
+      setStartError("No questions match your current filters. Try selecting more topics.");
+      return;
+    }
+
+    if (session.questions.length < questionCount) {
+      setStartError(
+        `Only ${session.questions.length} matching questions are available. Reduce the question count or broaden topic selection.`,
+      );
+      return;
+    }
+
+    setStartError(null);
+    clearMockExamResult();
+    saveMockExamSession(session);
+    navigate("/mockexam");
+  };
 
   const applyActualExamDefaults = () => {
     setIsTimed(true);
@@ -136,11 +143,16 @@ export default function MockExamPrepPage() {
           
           <div className="flex flex-col gap-10 w-full lg:w-auto lg:items-start items-center">
             <h1 className="-tracking-widest text-6xl lg:text-8xl">You ready?</h1>
-            <button className="flex py-6 lg:py-8 items-center justify-center border-2 duration-300 group hover:bg-black cursor-pointer">
+            <button
+              type="button"
+              onClick={handleStartExam}
+              className="flex py-6 lg:py-8 items-center justify-center border-2 duration-300 group hover:bg-black cursor-pointer"
+            >
               <h1 className="text-2xl w-50 group-hover:text-white font-bold group-hover:font-light duration-300">
                 LETS GO
               </h1>
             </button>
+            {startError ? <p className="text-sm text-red-700 text-center lg:text-left max-w-sm">{startError}</p> : null}
           </div>
 
           <div className="border border-black h-[70vh] w-full lg:w-[52vw] flex flex-col overflow-hidden">

@@ -72,7 +72,7 @@ export default function HomePage(){
                     <IconWithDesc
                         content="MOCK EXAM"
                         Icon={ExamIcon}
-                        onClick={() => navigate('/mockexam')}
+                        onClick={() => navigate('/mockexamprep')}
                     ></IconWithDesc>
                     <IconWithDesc
                         content="PREVIOUS EXAM"
