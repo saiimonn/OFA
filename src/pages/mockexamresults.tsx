@@ -311,10 +311,14 @@ export default function MockExamResultsPage() {
                                                             </div>
 
                                                             <div className="border-l-4 border-black pl-3 max-h-72 overflow-y-auto
-                                                                [&::-webkit-scrollbar]:w-[6px]
+                                                                [&::-webkit-scrollbar]:w-[3px]
                                                                 [&::-webkit-scrollbar-track]:bg-transparent
-                                                                [&::-webkit-scrollbar-thumb]:bg-black"
-                                                                 style={{scrollbarColor: "black transparent", scrollbarWidth: "auto", direction: "rtl"}}
+                                                                [&::-webkit-scrollbar-thumb]:bg-black
+                                                                [&::-webkit-scrollbar-button]:hidden"
+                                                                 style={{
+                                                                    scrollbarColor: "black transparent", 
+                                                                    scrollbarWidth: "auto", 
+                                                                    direction: "rtl"}}
                                                             >
                                                                 <div style={{direction: "ltr"}}>
                                                                     <p className="text-xs uppercase tracking-wide opacity-70 font-semibold">How to answer it</p>
